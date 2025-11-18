@@ -44,9 +44,9 @@ window.addEventListener('keyup', e => { keyStates[e.key] = false; });
 const player = {
   x: 50, y: 50, w: 24, h: 32,
   vx: 0, vy: 0,
-  maxSpeed: 5,
-  accelGround: 2,
-  accelAir: 0.2,
+  maxSpeed: 3.6,
+  accelGround: 0.5,
+  accelAir: 0.15,
   gravity: 0.4,
   jumpPower: 10,
   onGround: false
