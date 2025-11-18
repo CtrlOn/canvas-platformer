@@ -33,7 +33,7 @@ let jumpFrame = 0;
 window.addEventListener('keydown', e => { // JS is dumb, this is not keydown, this is keyheld
   if (e.key === 'z' || e.key === 'ArrowUp' || e.key === 'w') {
     if (keyStates[e.key] !== true) { // Now this is real keydown
-      jumpFrame = Date.now() + 120;
+      jumpFrame = Date.now() + 150;
     }
   }
   keyStates[e.key] = true;
@@ -44,8 +44,11 @@ window.addEventListener('keyup', e => { keyStates[e.key] = false; });
 const player = {
   x: 50, y: 50, w: 24, h: 32,
   vx: 0, vy: 0,
-  speed: 3.6,
-  jumpPower: 12,
+  maxSpeed: 4,
+  accelGround: 4,
+  accelAir: 0.2,
+  gravity: 0.4,
+  jumpPower: 10,
   onGround: false
 };
 
@@ -82,12 +85,18 @@ function update(dt) {
   const t = Date.now();
 
   // input
-  if (keyStates['ArrowLeft'] || keyStates['a']) {
-    player.vx = -player.speed;
-  } else if (keyStates['ArrowRight'] || keyStates['d']) {
-    player.vx = player.speed;
+  let inputX = (((keyStates['ArrowRight'] || keyStates['d'])? 1 : 0) - ((keyStates['ArrowLeft'] || keyStates['a'])? 1 : 0));
+  let accel = player.onGround ? player.accelGround : player.accelAir;
+  if (inputX !== 0) {
+    player.vx += inputX * accel * dt;
+    player.vx = Math.max(-player.maxSpeed, Math.min(player.maxSpeed, player.vx));
   } else {
-    player.vx = 0;
+    // decelerate
+    if (player.vx > 0) {
+      player.vx = Math.max(0, player.vx - accel * dt);
+    } else if (player.vx < 0) {
+      player.vx = Math.min(0, player.vx + accel * dt);
+    }
   }
 
   // jump
@@ -98,7 +107,7 @@ function update(dt) {
   }
 
   // physics
-  player.vy += 0.5; // gravity
+  player.vy += player.gravity * dt;
   player.x += player.vx * dt;
   collideHorizontal();
   player.y += player.vy * dt;
