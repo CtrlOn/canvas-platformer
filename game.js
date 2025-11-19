@@ -69,6 +69,9 @@ level[rows-6][14] = [190, 190, 10];
 level[rows-5][15] = [190, 190, 10];
 level[rows-4][24] = [190, 190, 10];
 level[rows-6][30] = [190, 190, 10];
+level[rows-4][6]  = [190, 180, 20];
+level[rows-5][7]  = [190, 180, 20];
+level[rows-6][8]  = [190, 180, 20];
 
 function tileAtPixel(px, py) {
   const c = Math.floor(px / tileSize);
