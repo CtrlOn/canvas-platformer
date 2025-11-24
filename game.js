@@ -30,6 +30,19 @@ window.addEventListener('resize', resizeCanvas);
 const keyStates = {};
 let jumpFrame = 0;
 
+////////// BACKGROUND MUSIC //////////
+const bgm = document.getElementById('Soundtrack');
+let musicStarted = false;
+
+// browsers require user interaction before playing audio
+window.addEventListener('keydown', () => {
+    if (!musicStarted) {
+        Soundtrack.volume = 0.6; // Modify volume as needed
+        Soundtrack.play().catch(err => console.log(err));
+        musicStarted = true;
+    }
+});
+
 window.addEventListener('keydown', e => {
   // treat multiple keys as the same "jump" input (buffered)
   if (e.key === 'z' || e.key === 'ArrowUp' || e.key === 'w') {
