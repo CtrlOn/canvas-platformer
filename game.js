@@ -78,6 +78,10 @@ const MOVE = {
   jumpPower: 12,
   jumpCutMultiplier: 0.5,
 
+  //if on ice
+  accelIce: 0.25,
+  frictionIce: 0.03,
+
   // timers (ms)
   coyoteTime: 120,
   jumpBuffer: 150
@@ -89,6 +93,7 @@ const player = {
   vx: 0, vy: 0,
   // runtime flags
   onGround: false,
+  onIce: false,
   coyoteUntil: 0
 };
 
@@ -100,6 +105,7 @@ function respawn() {
   player.vx = 0;
   player.vy = 0;
   player.onGround = false;
+  player.onIce = false;
   // immediately restore any unstable tiles so the world resets on player respawn
   restoreUnstableNow();
 }
@@ -122,14 +128,16 @@ const Tile = {
   Empty: 0,
   Solid: 1,
   Kill: 2,
-  Unstable: 3
+  Unstable: 3,
+  Ice: 4
 };
 
 const tileProperties = {
   [Tile.Empty]: { color: null, solid: false, behavior: 'none' },
   [Tile.Solid]: { color: [135, 170, 35], solid: true, behavior: 'solid' },
   [Tile.Kill]: { color: [255, 60, 60], solid: false, behavior: 'kill' },
-  [Tile.Unstable]: { color: [255, 200, 0], solid: true, behavior: 'unstable' }
+  [Tile.Unstable]: { color: [255, 200, 0], solid: true, behavior: 'unstable' },
+  [Tile.Ice]: { color: [214, 255, 250], solid: true, behavior: 'ice' }
 };
 
 const level = [];
@@ -182,11 +190,11 @@ const levelText = `0000000000000000000000000000000000000000000000000000000000021
 0000000000000000000000000000000000000000020000020000000000001000000000000000000000000000000000000000
 0000000000000000000111110000000000000000022222220000000022221000103000000000000000000000000000000000
 0000000000000000000000000000000000000000000020000000000000001000000000000000000000000000000000000000
-0000000000000000000000000001001000000000000020000000000000002000000000000000000000000000000000000000
+0000000000000000000000000004001000000000000020000000000000002000000000000000000000000000000000000000
 0000000000000000000000000002002000000000000020000000000000000000000000100000000000000000000000000000
 0000000000000000000000000000000000000000000020003333300000000000000000000000000000000000000000000000
 0000000000000000000000033333333333300000000020000000000000002000000000000000000000000000000000000000
-0000000000000001001000000000000000000000000020000000000000301000111111100000000000000000000000000000
+0000000000000004004000000000000000000000000020000000000000301000111111100000000000000000000000000000
 0000000000100001221000000000000000000000000020000000000010001000000000000000000000000000000000000000
 0000000000000001221222222222222222222222222222222222222212221000122222200000000000000000000000000000
 1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
@@ -228,9 +236,29 @@ function update(dt) {
   // (no slip/groundRetention logic — simplified movement)
 
   // Horizontal control (simple single-step integration)
-  const accel = player.onGround ? MOVE.accelGround : MOVE.accelAir;
-  const desiredVx = inputX * (player.onGround ? MOVE.maxSpeedGround : MOVE.maxSpeedAir);
-  player.vx = approach(player.vx, desiredVx, accel * dt);
+  const onIce = player.onGround && player.onIce;
+
+  if(onIce){
+    if(inputX !== 0){
+      const accel = MOVE.accelIce
+      const desiredVx = inputX * MOVE.maxSpeedGround;
+      player.vx = approach(player.vx, desiredVx, accel * dt);
+    }
+  
+    if(inputX === 0){
+      player.vx = approach(player.vx, 0, MOVE.frictionIce * dt);
+    }
+  } else {
+    const accel = player.onGround ? MOVE.accelGround : MOVE.accelAir;
+    const desiredVx = inputX * (player.onGround ? MOVE.maxSpeedGround : MOVE.maxSpeedAir);
+    player.vx = approach(player.vx, desiredVx, accel * dt);
+
+    if (inputX === 0 && player.onGround) {
+      player.vx = approach(player.vx, 0, MOVE.frictionGround * dt);
+    }
+  }
+
+
 
   // jump (buffered + coyote time)
   if (jumpFrame > t && (player.onGround || t <= player.coyoteUntil)) {
@@ -254,10 +282,6 @@ function update(dt) {
   const actualMaxSpeed = player.onGround ? MOVE.maxSpeedGround : MOVE.maxSpeedAir;
   player.vx = Math.max(-actualMaxSpeed, Math.min(actualMaxSpeed, player.vx));
 
-  // ground friction when no input
-  if (inputX === 0 && player.onGround) {
-    player.vx = approach(player.vx, 0, MOVE.frictionGround * dt);
-  }
 
   
 
@@ -308,7 +332,7 @@ function collideHorizontal() {
       respawn();
       return;
     }
-    if (behavior === 'solid' || behavior === 'unstable') {
+    if (behavior === 'solid' || behavior === 'unstable' || behavior === 'ice') {
       // align player to tile edge
       if (sign > 0) player.x = Math.floor((testX) / tileSize) * tileSize - player.w - 0.001;
       else player.x = (Math.floor(testX / tileSize) + 1) * tileSize + 0.001;
@@ -323,6 +347,7 @@ function collideVertical() {
   const testY = sign > 0 ? player.y + player.h : player.y;
   const samples = [player.x + 1, player.x + player.w - 1];
   player.onGround = false;
+  player.onIce = false;
   for (let sx of samples) {
     const tileType = tileAtPixel(sx, testY);
     const behavior = tileProperties[tileType] && tileProperties[tileType].behavior;
@@ -337,13 +362,15 @@ function collideVertical() {
       return;
     }
 
-    if (behavior === 'solid' || behavior === 'unstable') {
+    if (behavior === 'solid' || behavior === 'unstable' || behavior === 'ice') {
       if (sign > 0) {
         // landed on top of tile
         player.y = Math.floor((testY) / tileSize) * tileSize - player.h - 0.001;
         player.onGround = true;
 
         player.vy = 0;
+
+        player.onIce = (behavior === 'ice');
 
         // refresh coyote window when we touched ground
         player.coyoteUntil = Date.now() + MOVE.coyoteTime;
