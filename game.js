@@ -402,14 +402,12 @@ function collideVertical() {
           if(level[r] && level[r][c] === Tile.Breakable) {
             level[r][c] = Tile.Empty;
           }
-        
           // hit bottom of tile
           player.y = (Math.floor(testY / tileSize) + 1) * tileSize + 0.001;
           player.vy = 0;
-
           return;
         } else {
-          player.y = (Math.floor(testY / tileSize) + 1) *tileSize * 0.001;
+          player.y = (Math.floor(testY / tileSize) + 1) * tileSize + 0.001;
           player.vy = 0;
           return;
         }
