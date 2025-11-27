@@ -27,6 +27,29 @@ const levelText = `0000000000000000000000000000000000000000000020000000000000021
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+// === MARIO SPRITES ===
+const marioImageRight = new Image();
+marioImageRight.src = 'assets/player.png';   // facing right
+
+const marioImageLeft = new Image();
+marioImageLeft.src = 'assets/playerl.png';   // facing left
+
+// Animation state derived from original SMB sprite sheet
+const marioSprite = {
+  imgR: marioImageRight,
+  imgL: marioImageLeft,
+  frameW: 16,
+  frameH: 16,
+  baseX: 80,   // idle small Mario X in the sheet (from your Player code)
+  baseY: 32,   // idle small Mario Y in the sheet
+  frames: [0], // frame offsets (0,1,2) horizontally
+  currentFrame: 0,
+  frameTimer: 0,
+  frameInterval: 12, // in "game frames"
+  state: 'idle'
+};
+
+
 let W = canvas.width, H = canvas.height;
 
 // camera (scales and translates to viewport)
@@ -115,12 +138,13 @@ const MOVE = {
 
 // player (runtime state only)
 const player = {
-  x: 40, y: 40, w: 25, h: 25,
+  x: 40, y: 40, w: tileSize, h: tileSize,
   vx: 0, vy: 0,
   // runtime flags
   onGround: false,
   onIce: false,
-  coyoteUntil: 0
+  coyoteUntil: 0,
+  facingLeft: false
 };
 
 // spawn/respawn
@@ -251,6 +275,11 @@ function update(dt) {
   // input
   const inputX = (((keyStates['ArrowRight'] || keyStates['d']) ? 1 : 0) - ((keyStates['ArrowLeft'] || keyStates['a']) ? 1 : 0));
 
+  // update facing direction for sprite
+  if (inputX > 0) player.facingLeft = false;
+  else if (inputX < 0) player.facingLeft = true;
+
+
   // (no slip/groundRetention logic — simplified movement)
 
   // Horizontal control (simple single-step integration)
@@ -335,10 +364,61 @@ function update(dt) {
     }
   }
 
+  updateMarioAnimation(dt);
+
   // camera follow (center player horizontally within level bounds)
   camera.x = player.x - (W / camera.scale)/2 + player.w/2;
   camera.x = Math.max(0, Math.min(camera.x, cols*tileSize - (W / camera.scale)));
 }
+
+function updateMarioAnimation(dt) {
+  let newState;
+  if (!player.onGround && Math.abs(player.vy) > 0.1) {
+    newState = 'jump';
+  } else if (player.onGround && Math.abs(player.vx) > 0.1) {
+    newState = 'run';
+  } else {
+    newState = 'idle';
+  }
+
+  if (newState !== marioSprite.state) {
+    marioSprite.state = newState;
+
+    if (newState === 'run') {
+      // running animation: baseX 96, frames [0,1,2] -> 96,112,128
+      marioSprite.baseX = 96;
+      marioSprite.baseY = 32;
+      marioSprite.frames = [0, 1, 2];
+      marioSprite.frameInterval = 6; // faster animation
+    } else if (newState === 'jump') {
+      // jumping frame: 160,32
+      marioSprite.baseX = 160;
+      marioSprite.baseY = 32;
+      marioSprite.frames = [0];
+      marioSprite.frameInterval = Infinity;
+    } else {
+      // idle: 80,32
+      marioSprite.baseX = 80;
+      marioSprite.baseY = 32;
+      marioSprite.frames = [0];
+      marioSprite.frameInterval = Infinity;
+    }
+
+    marioSprite.currentFrame = 0;
+    marioSprite.frameTimer = 0;
+  }
+
+  // advance frames only when we have a multi-frame animation
+  if (marioSprite.frames.length > 1 && isFinite(marioSprite.frameInterval)) {
+    marioSprite.frameTimer += dt;
+    if (marioSprite.frameTimer >= marioSprite.frameInterval) {
+      marioSprite.frameTimer = 0;
+      marioSprite.currentFrame =
+        (marioSprite.currentFrame + 1) % marioSprite.frames.length;
+    }
+  }
+}
+
 
 function collideHorizontal() {
   const sign = Math.sign(player.vx) || 1;
@@ -450,6 +530,37 @@ function collideVertical() {
   }
 }
 
+function drawMario() {
+  const img = player.facingLeft ? marioSprite.imgL : marioSprite.imgR;
+
+  // current frame source rect in the sprite sheet
+  const frameOffset = marioSprite.frames[marioSprite.currentFrame] || 0;
+  const sx = marioSprite.baseX + frameOffset * marioSprite.frameW;
+  const sy = marioSprite.baseY;
+  const sw = marioSprite.frameW;
+  const sh = marioSprite.frameH;
+
+  // scale 16x16 to one tile (32x32)
+  const scale = tileSize / marioSprite.frameW; // 2 if tileSize=32
+  const dw = sw * scale;
+  const dh = sh * scale;
+
+  const dx = player.x;
+  const dy = player.y;
+
+  // only draw when image is loaded
+  if (img.complete && img.naturalWidth !== 0) {
+    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+  } else {
+    // fallback: red box while image loading
+    ctx.fillStyle = '#d33';
+    ctx.fillRect(dx, dy, player.w, player.h);
+    ctx.strokeStyle = '#0008';
+    ctx.strokeRect(dx, dy, player.w, player.h);
+  }
+}
+
+
 let last = 0;
 function loop(t) {
   const dt = Math.min(16, t - last) / (1000/60) || 1;
@@ -539,10 +650,7 @@ function loop(t) {
   }
 
   // draw player (simple rectangle)
-  ctx.fillStyle = '#d33';
-  ctx.fillRect(player.x, player.y, player.w, player.h);
-  ctx.strokeStyle = '#0008';
-  ctx.strokeRect(player.x, player.y, player.w, player.h);
+  drawMario();
 
   ctx.restore();
 
