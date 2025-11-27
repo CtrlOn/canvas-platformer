@@ -27,6 +27,8 @@ const levelText = `0000000000000000000000000000000000000000000020000000000000021
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+ctx.imageSmoothingEnabled = false;
+
 // === MARIO SPRITES ===
 const marioImageRight = new Image();
 marioImageRight.src = 'assets/player.png';   // facing right
@@ -65,6 +67,8 @@ function resizeCanvas() {
   W = canvas.width;
   H = canvas.height;
   updateCamera();
+
+  ctx.imageSmoothingEnabled = false;
 }
 
 resizeCanvas();
