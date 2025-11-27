@@ -510,7 +510,7 @@ function collideVertical() {
               breakAt: now,
               expireAt: now + 3000,
               fallY: 0,
-              vy: 0,
+              vy: -15, // bump upward before falling
               origTile: level[r] && level[r][c]
             };
           }
