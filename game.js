@@ -1,11 +1,31 @@
-// Tiny platformer engine - behavior-driven tiles
-const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d');
+// Level data
 
 // game world constants
 const tileSize = 32; // fixed game units
 const cols = 100; // wide level (camera will follow)
 const rows = 16; // fixed rows
+
+// Embedded level data (from level.txt) to avoid CORS issues when publishing
+const levelText = `0000000000000000000000000000000000000000000020000000000000021222222222000000000000000000000000000000
+0000000000000000000000000000000000000000000020000000300000001000011100000000001111111100000000000000
+0000000000000000000000000000000330000000000000000000200000001000000000000000660000000000000000000000
+0000000000000000000000000003300000003333326666623333300000331000000333300000000000000000000000000000
+0000000000000000000000000000000000000000020000020000000000001000000000000000000000000000000000000000
+0000000000000000000111110000000000000000022222220000000022221000103000000000000000000000000000000000
+0000000000000000000000000000000000000000000020000000000000001000000000000000000000000000000000000000
+0000000000000000000000066666666666600000000020000000000000002000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000020000000000000000000000000100000000000000000000000000000
+0000000000000000000000000000000000000000000020003333300000000000000000000000000000000000000000000000
+0000000000000000000000066666666666600000000020000000000000002000000000000000000000000000000000000000
+0000055500000004004000000000000000000000000020000000000000301000111111100000000000000000000000000000
+0000000000100001221000000000000000000000000020000000000010001000000000000000000000000000000000000000
+0000000000000001221222222222222222222222222222222222222212221000122222200000000000000000000000000000
+1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
+1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111`;
+
+// Tiny platformer engine - behavior-driven tiles
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
 
 let W = canvas.width, H = canvas.height;
 
@@ -115,47 +135,53 @@ function respawn() {
   player.vy = 0;
   player.onGround = false;
   player.onIce = false;
-  // immediately restore any unstable tiles so the world resets on player respawn
-  restoreUnstableNow();
-}
 
-function restoreUnstableNow() {
-  // restore any unstable tiles from the original base level
-  for (let rr = 0; rr < rows; rr++) {
-    for (let cc = 0; cc < cols; cc++) {
-      if (baseLevel[rr] && baseLevel[rr][cc] === Tile.Unstable) {
-        level[rr][cc] = Tile.Unstable;
-      }
-    }
-  }
-  // clear any visual-only unstable states
-  for (const k in unstableState) delete unstableState[k];
+  parseLevelText(levelText);
+  // clear all destruction timers
+  for (const k in destructionState) delete destructionState[k];
 }
 
 // tiles
 const Tile = {
   Empty: 0,
   Solid: 1,
-  Kill: 2,
-  Unstable: 3,
+  Lava: 2,
+  Crumble: 3,
   Ice: 4,
-  Breakable: 5
+  Breakable: 5,
+  ThinIce: 6
+};
+
+const BehaviorFlags = {
+  None: 0,
+  Solid: 1 << 0,
+  Kill: 1 << 1,
+  Unstable: 1 << 2,
+  Slippery: 1 << 3,
+  Breakable: 1 << 4
 };
 
 const tileProperties = {
-  [Tile.Empty]: { color: null, solid: false, behavior: 'none' },
-  [Tile.Solid]: { color: [135, 170, 35], solid: true, behavior: 'solid' },
-  [Tile.Kill]: { color: [255, 60, 60], solid: false, behavior: 'kill' },
-  [Tile.Unstable]: { color: [255, 200, 0], solid: true, behavior: 'unstable' },
-  [Tile.Ice]: { color: [214, 255, 250], solid: true, behavior: 'ice' },
-  [Tile.Breakable]: {color: [132, 76, 59], solid: true, behavior: 'breakable' }
+  [Tile.Empty]: { color: null, behaviors: BehaviorFlags.None },
+  [Tile.Solid]: { color: [100, 140, 30], behaviors: BehaviorFlags.Solid },
+  [Tile.Lava]: { color: [150, 60, 60], behaviors: BehaviorFlags.Kill },
+  [Tile.Crumble]: { color: [60, 60, 60], behaviors: BehaviorFlags.Unstable },
+  [Tile.Ice]: { color: [150, 180, 240], behaviors: BehaviorFlags.Slippery },
+  [Tile.Breakable]: { color: [132, 76, 59], behaviors: BehaviorFlags.Breakable },
+  [Tile.ThinIce]: { color: [180, 150, 240], behaviors: BehaviorFlags.Slippery | BehaviorFlags.Breakable | BehaviorFlags.Unstable }
 };
+
+// behavior helper functions
+function hasBehavior(tileType, flag) {
+  return (tileType & flag) === flag;
+}
+
+function getTileBehaviors(tile) {
+  return tile; // tile ID is the behavior flags bitmask
+}
 
 const level = [];
 
-// load level from `level.txt` where characters '0'..'4' map to Tile values
-// and '\n' indicates a new row. If fetch fails (e.g. file:// restrictions),
-// a simple fallback level will be used.
 function parseLevelText(text) {
   // initialize empty rows
   for (let rr = 0; rr < rows; rr++) level[rr] = new Array(cols).fill(Tile.Empty);
@@ -184,39 +210,20 @@ function parseLevelText(text) {
       continue;
     }
 
-    if (ch >= '0' && ch <= '5') {
+    if (ch >= '0' && ch <= '6') {
       level[r][c] = Number(ch);
     } else {
-      level[r][c] = Tile.Empty;
+      level[r][c] = Tile.Empty; // TODO: change error handling here (probably)
     }
     c++;
   }
 }
 
-// Embedded level data (from level.txt) to avoid CORS issues when publishing
-const levelText = `0000000000000000000000000000000000000000000000000000000000021222222222000000000000000000000000000000
-0000000000000000000000000000000000000000000000000000300000001000011100000000001111111100000000000000
-0000000000000000000000000000000330000000000000000000200000001000000000000000000000000000000000000000
-0000000000000000000000000003300000003333333333333333300000331000000333300000000000000000000000000000
-0000000000000000000000000000000000000000020000020000000000001000000000000000000000000000000000000000
-0000000000000000000111110000000000000000022222220000000022221000103000000000000000000000000000000000
-0000000000000000000000000000000000000000000020000000000000001000000000000000000000000000000000000000
-0000000000000000000000000004001000000000000020000000000000002000000000000000000000000000000000000000
-0000000000000000000000000002002000000000000020000000000000000000000000100000000000000000000000000000
-0000000000000000000000000000000000000000000020003333300000000000000000000000000000000000000000000000
-0000000000000000000000033333333333300000000020000000000000002000000000000000000000000000000000000000
-0000055500000004004000000000000000000000000020000000000000301000111111100000000000000000000000000000
-0000000000100001221000000000000000000000000020000000000010001000000000000000000000000000000000000000
-0000000000000001221222222222222222222222222222222222222212221000122222200000000000000000000000000000
-1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111
-1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111`;
-
-// snapshot of original level to allow respawning unstable tiles
-let baseLevel = [];
+// (no base snapshot — respawning removed)
 
 // per-instance unstable tile state (key = "r,c")
 // { state: 'crumbling'|'fallen', start, breakAt, respawnAt, fallY, vy }
-const unstableState = {};
+const destructionState = {};
 
 function tileAtPixel(px, py) {
   const c = Math.floor(px / tileSize);
@@ -300,19 +307,20 @@ function update(dt) {
 
   
 
-  // process unstable tiles: animate crumbling, spawn falling debris, and respawn
-  for (const key in unstableState) {
-    const st = unstableState[key];
+  // process unstable tiles: animate crumbling, spawn falling debris
+  for (const key in destructionState) {
+    const st = destructionState[key];
     const now = Date.now();
     const [rr, cc] = key.split(',').map(Number);
 
     if (st.state === 'crumbling' && now >= st.breakAt) {
       // break the tile (becomes empty) and start falling debris
-      if (level[rr] && level[rr][cc] === Tile.Unstable) level[rr][cc] = Tile.Empty;
+      if (level[rr] && level[rr][cc] !== Tile.Empty) level[rr][cc] = Tile.Empty;
       st.state = 'fallen';
       st.fallY = 0;
       st.vy = 0;
-      if (!st.respawnAt) st.respawnAt = now + 6000; // 6s after break
+      // fallen visuals expire after a short time
+      st.expireAt = now + 3000; // 3s visual
     }
 
     if (st.state === 'fallen') {
@@ -320,12 +328,9 @@ function update(dt) {
       st.vy += MOVE.gravity * dt * 10; // scale for visible effect
       st.fallY += st.vy * dt;
 
-      // respawn after timeout
-      if (now >= st.respawnAt) {
-        if (baseLevel[rr] && baseLevel[rr][cc] === Tile.Unstable) {
-          level[rr][cc] = Tile.Unstable;
-        }
-        delete unstableState[key];
+      // remove visual after lifetime
+      if (st.expireAt && now >= st.expireAt) {
+        delete destructionState[key];
       }
     }
   }
@@ -341,13 +346,14 @@ function collideHorizontal() {
   const samples = [player.y + 1, player.y + player.h - 1];
   for (let sy of samples) {
     const tileType = tileAtPixel(testX, sy);
-    const behavior = tileProperties[tileType] && tileProperties[tileType].behavior;
-    if (!behavior || behavior === 'none') continue;
-    if (behavior === 'kill') {
+    const props = tileProperties[tileType];
+    if (!props) continue;
+    const flags = props.behaviors || BehaviorFlags.None;
+    if (hasBehavior(flags, BehaviorFlags.Kill)) {
       respawn();
       return;
     }
-    if (behavior === 'solid' || behavior === 'unstable' || behavior === 'ice') {
+    if (hasBehavior(flags, BehaviorFlags.Solid) || hasBehavior(flags, BehaviorFlags.Unstable) || hasBehavior(flags, BehaviorFlags.Slippery)) {
       // align player to tile edge
       if (sign > 0) player.x = Math.floor((testX) / tileSize) * tileSize - player.w - 0.001;
       else player.x = (Math.floor(testX / tileSize) + 1) * tileSize + 0.001;
@@ -365,19 +371,20 @@ function collideVertical() {
   player.onIce = false;
   for (let sx of samples) {
     const tileType = tileAtPixel(sx, testY);
-    const behavior = tileProperties[tileType] && tileProperties[tileType].behavior;
-    if (!behavior || behavior === 'none') continue;
+    const props = tileProperties[tileType];
+    if (!props) continue;
+    const flags = props.behaviors || BehaviorFlags.None;
 
     // compute tile cell coords
     const c = Math.floor(sx / tileSize);
     const r = Math.floor(testY / tileSize);
 
-    if (behavior === 'kill') {
+    if (hasBehavior(flags, BehaviorFlags.Kill)) {
       respawn();
       return;
     }
 
-    if (behavior === 'solid' || behavior === 'unstable' || behavior === 'ice' || behavior === 'breakable') {
+    if (hasBehavior(flags, BehaviorFlags.Solid) || hasBehavior(flags, BehaviorFlags.Unstable) || hasBehavior(flags, BehaviorFlags.Slippery) || hasBehavior(flags, BehaviorFlags.Breakable)) {
       if (sign > 0) {
         // landed on top of tile
         player.y = Math.floor((testY) / tileSize) * tileSize - player.h - 0.001;
@@ -385,36 +392,50 @@ function collideVertical() {
 
         player.vy = 0;
 
-        player.onIce = (behavior === 'ice');
+        player.onIce = hasBehavior(flags, BehaviorFlags.Slippery);
 
         // refresh coyote window when we touched ground
         player.coyoteUntil = Date.now() + MOVE.coyoteTime;
 
-        if (behavior === 'unstable') {
+        if (hasBehavior(flags, BehaviorFlags.Unstable)) {
           const key = `${r},${c}`;
-          if (!unstableState[key]) {
+          if (!destructionState[key]) {
             const now = Date.now();
             const breakDelay = 500; // ms until tile breaks after landing
-            unstableState[key] = {
+            destructionState[key] = {
               state: 'crumbling',
               start: now,
               breakAt: now + breakDelay,
-              // respawn will be scheduled after break (breakAt + 6000ms)
-              respawnAt: now + breakDelay + 6000,
+              // no respawn
+              respawnAt: null,
               fallY: 0,
-              vy: 0
+              vy: 0,
+              origTile: level[r] && level[r][c]
             };
           }
-        } 
-        
+        }
+
         // landing on breakable from above acts like normal block
         return;
       } else {
-        // hitting breakable tile from below
-        if (behavior === 'breakable') {
-          if(level[r] && level[r][c] === Tile.Breakable) {
-            level[r][c] = Tile.Empty;
+        // hitting tile from below
+        if (hasBehavior(flags, BehaviorFlags.Breakable)) {
+          const key = `${r},${c}`;
+          // create a fallen visual state and remove the tile immediately
+          if (!destructionState[key]) {
+            const now = Date.now();
+            destructionState[key] = {
+              state: 'fallen',
+              start: now,
+              breakAt: now,
+              expireAt: now + 3000,
+              fallY: 0,
+              vy: 0,
+              origTile: level[r] && level[r][c]
+            };
           }
+          // remove tile immediately from level for physics
+          if (level[r] && level[r][c] !== Tile.Empty) level[r][c] = Tile.Empty;
           // hit bottom of tile
           player.y = (Math.floor(testY / tileSize) + 1) * tileSize + 0.001;
           player.vy = 0;
@@ -484,12 +505,14 @@ function loop(t) {
   // draw unstable tile visuals (crumbling and falling debris)
   {
     const now = Date.now();
-    for (const key in unstableState) {
-      const st = unstableState[key];
+    for (const key in destructionState) {
+      const st = destructionState[key];
       const [rr, cc] = key.split(',').map(Number);
       const x = cc * tileSize;
       const y = rr * tileSize;
-      const color = tileProperties[Tile.Unstable].color;
+      const origTile = (st.origTile !== undefined) ? st.origTile : Tile.Crumble;
+      const props = (origTile !== undefined && tileProperties[origTile]) ? tileProperties[origTile] : tileProperties[Tile.Crumble];
+      const color = props && props.color;
       if (!color) continue;
 
       if (st.state === 'crumbling') {
@@ -546,8 +569,7 @@ function showLevelLoadedMessage() {
 (async function init() {
   try {
     parseLevelText(levelText);
-    // take a snapshot of the original level so unstable tiles can respawn
-    baseLevel = level.map(row => row.slice());
+    // respawning removed — no base snapshot
     showLevelLoadedMessage();
   } catch (err) {
     console.error('Failed to parse level data.', err);
