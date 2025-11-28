@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tiny Platformer</title>
+    <!-- TODO: in generator, make title dynamic -->
+    <title>Platformer game</title>
     <style>
         body {
             margin: 0;
@@ -17,12 +18,15 @@
             width: 100vw;
             height: 100vh;
             display: block;
+
         }
     </style>
 </head>
 <body>
     <canvas id="game"></canvas>
-        <script src="game.js"></script>
         <audio id="Soundtrack" src="assets/Soundtrack.mp3" loop></audio>
+        <audio id="JumpSfx" src="assets/goofy_ah_jump.mp3"></audio>
+        <audio id="DeathSfx" src="assets/death.mp3"></audio>
+            <script src="game.js" defer></script>
 </body>
 </html>
