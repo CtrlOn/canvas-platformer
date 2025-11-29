@@ -38,7 +38,7 @@ bgNear.src = 'assets/background/near.png';
 
 // load sprite sheet
 const tilesSpriteSheet = new Image();
-tilesSpriteSheet.src = 'assets/platformer_tiles.png';
+tilesSpriteSheet.src = 'assets/tiles.png';
 
 // sprite layout: 2 rows x 6 columns, each 64x64
 // row 0: grass variants, row 1: grassless variants
@@ -57,15 +57,12 @@ function getTileSpriteCoords(tileType, isGrass, r, c) {
 }
 // === MARIO SPRITES ===
 const marioImageRight = new Image();
-marioImageRight.src = 'assets/player.png';   // facing right
-
-const marioImageLeft = new Image();
-marioImageLeft.src = 'assets/playerl.png';   // facing left
+marioImageRight.src = 'assets/player.png';   // facing right (will be flipped for left)
 
 // Animation state derived from original SMB sprite sheet
 const marioSprite = {
   imgR: marioImageRight,
-  imgL: marioImageLeft,
+  imgL: marioImageRight,  // use same image, flip in drawMario
   frameW: 16,
   frameH: 16,
   baseX: 80,   // idle small Mario X in the sheet (from your Player code)
@@ -561,7 +558,7 @@ function collideVertical() {
 }
 
 function drawMario() {
-  const img = player.facingLeft ? marioSprite.imgL : marioSprite.imgR;
+  const img = marioSprite.imgR;  // use the same image for both directions
 
   // current frame source rect in the sprite sheet
   const frameOffset = marioSprite.frames[marioSprite.currentFrame] || 0;
@@ -580,7 +577,15 @@ function drawMario() {
 
   // only draw when image is loaded
   if (img.complete && img.naturalWidth !== 0) {
-    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+    if (player.facingLeft) {
+      // flip horizontally
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, sx, sy, sw, sh, -dx - dw, dy, dw, dh);
+      ctx.restore();
+    } else {
+      ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+    }
   } else {
     // fallback: red box while image loading
     ctx.fillStyle = '#d33';
