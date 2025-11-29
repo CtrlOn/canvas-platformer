@@ -29,12 +29,15 @@ const ctx = canvas.getContext('2d');
 
 ctx.imageSmoothingEnabled = false;
 
-// load background layers for parallax
+// load background layers for parallax with variants
+const bgFarVariants = ['far.png', 'far2.png'];
+const bgNearVariants = ['near.png', 'near2.png', 'near3.png'];
+
 const bgFar = new Image();
-bgFar.src = 'assets/background/far.png';
+bgFar.src = 'assets/background/' + bgFarVariants[Math.floor(Math.random() * bgFarVariants.length)];
 
 const bgNear = new Image();
-bgNear.src = 'assets/background/near.png';
+bgNear.src = 'assets/background/' + bgNearVariants[Math.floor(Math.random() * bgNearVariants.length)];
 
 // load sprite sheet
 const tilesSpriteSheet = new Image();
