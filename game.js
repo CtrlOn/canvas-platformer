@@ -38,7 +38,7 @@ bgNear.src = 'assets/background/near.png';
 
 // load sprite sheet
 const tilesSpriteSheet = new Image();
-tilesSpriteSheet.src = 'assets/tiles.png';
+tilesSpriteSheet.src = 'assets/sprites/tiles.png';
 
 // sprite layout: 2 rows x 6 columns, each 64x64
 // row 0: grass variants, row 1: grassless variants
@@ -57,7 +57,7 @@ function getTileSpriteCoords(tileType, isGrass, r, c) {
 }
 // === MARIO SPRITES ===
 const marioImageRight = new Image();
-marioImageRight.src = 'assets/player.png';   // facing right (will be flipped for left)
+marioImageRight.src = 'assets/sprites/player.png';   // facing right (will be flipped for left)
 
 // Animation state derived from original SMB sprite sheet
 const marioSprite = {
