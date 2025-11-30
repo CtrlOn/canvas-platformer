@@ -249,10 +249,10 @@ const tileProperties = {
   [Tile.Void]: { color: null, behaviors: BehaviorFlags.None },
   [Tile.Dirt]: { color: [100, 140, 30], behaviors: BehaviorFlags.Solid },
   [Tile.Lava]: { color: [150, 60, 60], behaviors: BehaviorFlags.Kill },
-  [Tile.Crumble]: { color: [60, 60, 60], behaviors: BehaviorFlags.Unstable },
-  [Tile.Ice]: { color: [150, 180, 240], behaviors: BehaviorFlags.Slippery },
-  [Tile.Bricks]: { color: [132, 76, 59], behaviors: BehaviorFlags.Breakable },
-  [Tile.ThinIce]: { color: [180, 150, 240], behaviors: BehaviorFlags.Slippery | BehaviorFlags.Breakable | BehaviorFlags.Unstable }
+  [Tile.Crumble]: { color: [60, 60, 60], behaviors: BehaviorFlags.Solid | BehaviorFlags.Unstable },
+  [Tile.Ice]: { color: [150, 180, 240], behaviors: BehaviorFlags.Solid | BehaviorFlags.Slippery },
+  [Tile.Bricks]: { color: [132, 76, 59], behaviors: BehaviorFlags.Solid | BehaviorFlags.Breakable },
+  [Tile.ThinIce]: { color: [180, 150, 240], behaviors: BehaviorFlags.Solid | BehaviorFlags.Slippery | BehaviorFlags.Breakable | BehaviorFlags.Unstable }
 };
 
 // behavior helper functions
