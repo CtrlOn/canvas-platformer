@@ -84,6 +84,18 @@ function getTileSpriteCoords(tileType, isTopmost, r, c, tileAnimFrame) {
     sh: spriteSize
   };
 }
+
+// === ENEMY SPRITES ===
+const enemiesImage = new Image();
+enemiesImage.src = 'assets/sprites/enemies.png'; 
+const GOOMBA_SPRITE = {
+  // 4 coins + 1 debris = 5 items * 16px = Starts at 80px
+  walk1: { x: 115, y: 4, w: 16, h: 16 }, 
+  walk2: { x: 131, y: 4, w: 16, h: 16 },
+  squash: { x: 147, y: 4, w: 16, h: 16 }
+};
+
+
 // === MARIO SPRITES ===
 const marioImageRight = new Image();
 marioImageRight.src = 'assets/sprites/player.png';   // facing right (will be flipped for left)
@@ -329,6 +341,108 @@ function approach(current, target, maxDelta) {
   return current;
 }
 
+const goombas = [];
+
+function spawnGoomba(x, y) {
+  goombas.push({
+    x: x, 
+    y: y, 
+    w: tileSize, 
+    h: tileSize, 
+    vx: -1.5, // Move left by default
+    vy: 0,
+    state: 'walking', // 'walking', 'dying', 'dead'
+    deadTimer: 0,     // To remove it after squashing
+    animTimer: 0,
+    frameIndex: 0
+  });
+}
+
+function updateGoombas(dt) {
+  for (let i = goombas.length - 1; i >= 0; i--) {
+    let g = goombas[i];
+
+    // 1. Remove if completely dead
+    if (g.state === 'dead') {
+      goombas.splice(i, 1);
+      continue;
+    }
+
+    // 2. Handle "Dying" (Squashed visual)
+    if (g.state === 'dying') {
+      g.deadTimer += dt;
+      if (g.deadTimer > 30) { // Disappear after ~0.5 seconds (30 frames)
+        g.state = 'dead';
+      }
+      continue; // Don't move or interact if dying
+    }
+
+    // 3. Physics & Movement
+    // Apply gravity
+    g.vy += MOVE.gravity * dt;
+    if (g.vy > MOVE.maxFallSpeed) g.vy = MOVE.maxFallSpeed;
+
+    // Move X
+    g.x += g.vx * dt;
+    // Wall Collision: Reuse your tileAtPixel logic
+    // Check center-left or center-right
+    const checkX = g.vx < 0 ? g.x : g.x + g.w;
+    if (tileAtPixel(checkX, g.y + g.h - 1) !== Tile.Void) {
+        g.vx *= -1; // Turn around
+        g.x += g.vx * dt; // Push back out slightly
+    }
+
+    // Move Y
+    g.y += g.vy * dt;
+    // Floor Collision
+    if (tileAtPixel(g.x + g.w/2, g.y + g.h) !== Tile.Void) {
+       g.y = Math.floor(g.y / tileSize) * tileSize;
+       g.vy = 0;
+    }
+
+    // 4. Animation
+    g.animTimer += dt;
+    if (g.animTimer > 10) { // Animate every 10 frames
+        g.frameIndex = (g.frameIndex + 1) % 2;
+        g.animTimer = 0;
+    }
+  }
+}
+
+function checkGoombaCollisions() {
+  // Bounding box for Mario
+  const mx = player.x;
+  const my = player.y;
+  const mw = player.w;
+  const mh = player.h;
+
+  for (let g of goombas) {
+    if (g.state !== 'walking') continue;
+
+    // Simple AABB Collision overlap check
+    if (mx < g.x + g.w && mx + mw > g.x &&
+        my < g.y + g.h && my + mh > g.y) {
+      
+      // COLLISION DETECTED
+      
+      // Check if Mario is "falling" onto the Goomba (Stomp)
+      // We check if Mario's bottom was previously above the Goomba's center
+      const hitFromAbove = (player.vy > 0) && (player.y + player.h - player.vy*2 < g.y + g.h/2);
+
+      if (hitFromAbove) {
+        // --- STOMP SUCCESS ---
+        g.state = 'dying';
+        player.vy = -MOVE.jumpPower / 2; // Bounce Mario up
+        // Play stomp sound if you have one
+        if (typeof stompSfx !== 'undefined') stompSfx.play().catch(()=>{}); 
+      } else {
+        // --- MARIO DIES ---
+        respawn(); // Call your existing respawn function
+      }
+    }
+  }
+}
+
 function update(dt) {
   const t = Date.now();
 
@@ -423,6 +537,9 @@ function update(dt) {
       }
     }
   }
+
+  updateGoombas(dt);       // Move the Goombas
+  checkGoombaCollisions(); // Check if Mario hit them
 
   updateMarioAnimation(dt);
 
@@ -764,6 +881,29 @@ function loop(t) {
       }
     }
   }
+  // Draw Goombas
+  for (let g of goombas) {
+    let spriteCoords;
+    if (g.state === 'dying') {
+      spriteCoords = GOOMBA_SPRITE.squash;
+    } else {
+      spriteCoords = g.frameIndex === 0 ? GOOMBA_SPRITE.walk1 : GOOMBA_SPRITE.walk2;
+    }
+
+    if (enemiesImage.complete) {
+      // Need to flip logic if enemy is facing right? 
+      // Usually Goombas just flip the sprite or stay same.
+      ctx.drawImage(
+        enemiesImage,
+        spriteCoords.x, spriteCoords.y, spriteCoords.w, spriteCoords.h, // Source
+        g.x, g.y, g.w, g.h // Destination
+      );
+    } else {
+      // Fallback Red Box
+      ctx.fillStyle = g.state === 'dying' ? '#A55' : '#D22';
+      ctx.fillRect(g.x, g.y, g.w, g.h);
+    }
+  }
 
   // draw player (simple rectangle)
   drawMario();
@@ -801,4 +941,15 @@ function showLevelLoadedMessage() {
   }
   updateCamera();
   requestAnimationFrame(loop);
+
+  // Spawn a goombas
+  spawnGoomba(12 * tileSize, 10 * tileSize);
+  spawnGoomba(30 * tileSize, 5 * tileSize);
+  spawnGoomba(30 * tileSize, 1 * tileSize);
+  spawnGoomba(45 * tileSize, 1 * tileSize);
+  spawnGoomba(55 * tileSize, 5 * tileSize);
+  spawnGoomba(55 * tileSize, 7 * tileSize);
+  spawnGoomba(70 * tileSize, 10 * tileSize);
+  spawnGoomba(75 * tileSize, 10 * tileSize);
+
 })();
